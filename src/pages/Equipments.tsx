@@ -26,9 +26,9 @@ interface Equipment {
   type: string;
   brand: string;
   model: string;
-  specification: string;
+  spec: string;
   status: string;
-  daily_rate: number;
+  daily_rent: number;
   deposit: number;
   description?: string;
   purchase_date?: string;
@@ -74,9 +74,9 @@ export default function Equipments() {
     type: 'camera',
     brand: '',
     model: '',
-    specification: '',
+    spec: '',
     status: 'available',
-    daily_rate: 0,
+    daily_rent: 0,
     deposit: 0,
     description: '',
   });
@@ -149,9 +149,9 @@ export default function Equipments() {
       type: 'camera',
       brand: '',
       model: '',
-      specification: '',
+      spec: '',
       status: 'available',
-      daily_rate: 0,
+      daily_rent: 0,
       deposit: 0,
       description: '',
     });
@@ -166,9 +166,9 @@ export default function Equipments() {
       type: equipment.type,
       brand: equipment.brand,
       model: equipment.model,
-      specification: equipment.specification,
+      spec: equipment.spec,
       status: equipment.status,
-      daily_rate: equipment.daily_rate,
+      daily_rent: equipment.daily_rent,
       deposit: equipment.deposit,
       description: equipment.description || '',
     });
@@ -359,11 +359,11 @@ export default function Equipments() {
                       {EQUIPMENT_TYPES[eq.type as keyof typeof EQUIPMENT_TYPES] || eq.type}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{eq.brand} {eq.model}</td>
-                    <td className="px-4 py-3 text-gray-600 max-w-[150px] truncate">{eq.specification}</td>
+                    <td className="px-4 py-3 text-gray-600 max-w-[150px] truncate">{eq.spec}</td>
                     <td className="px-4 py-3">
                       <StatusBadge type="equipment" status={eq.status} />
                     </td>
-                    <td className="px-4 py-3 text-gray-600">¥{eq.daily_rate.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-gray-600">¥{eq.daily_rent.toFixed(2)}</td>
                     <td className="px-4 py-3 text-gray-600">¥{eq.deposit.toFixed(2)}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
@@ -504,7 +504,7 @@ export default function Equipments() {
                     <CircleDollarSign className="w-3 h-3" />
                     日租金
                   </label>
-                  <p className="font-medium text-gray-900">¥{selectedEquipment.daily_rate.toFixed(2)}</p>
+                  <p className="font-medium text-gray-900">¥{selectedEquipment.daily_rent.toFixed(2)}</p>
                 </div>
                 <div className="space-y-1">
                   <label className="text-sm text-gray-500">押金</label>
@@ -526,7 +526,7 @@ export default function Equipments() {
                   <Package className="w-3 h-3" />
                   规格
                 </label>
-                <p className="font-medium text-gray-900">{selectedEquipment.specification}</p>
+                <p className="font-medium text-gray-900">{selectedEquipment.spec}</p>
               </div>
               {selectedEquipment.description && (
                 <div className="space-y-1">
@@ -628,8 +628,8 @@ export default function Equipments() {
                   <label className="block text-sm font-medium text-gray-700">日租金 *</label>
                   <input
                     type="number"
-                    value={formData.daily_rate}
-                    onChange={(e) => setFormData({ ...formData, daily_rate: Number(e.target.value) })}
+                    value={formData.daily_rent}
+                    onChange={(e) => setFormData({ ...formData, daily_rent: Number(e.target.value) })}
                     min="0"
                     step="0.01"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
@@ -665,8 +665,8 @@ export default function Equipments() {
                 <label className="block text-sm font-medium text-gray-700">规格</label>
                 <input
                   type="text"
-                  value={formData.specification}
-                  onChange={(e) => setFormData({ ...formData, specification: e.target.value })}
+                  value={formData.spec}
+                  onChange={(e) => setFormData({ ...formData, spec: e.target.value })}
                   placeholder="器材规格参数"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />

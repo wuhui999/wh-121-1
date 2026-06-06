@@ -32,8 +32,8 @@ interface Order {
     type: string;
     brand: string;
     model: string;
-    specification: string;
-    daily_rate: number;
+    spec: string;
+    daily_rent: number;
     deposit: number;
   };
   customer_id: number;
@@ -52,24 +52,62 @@ interface Order {
   remark?: string;
   lending?: {
     id: number;
-    lending_date: string;
-    clerk_name: string;
+    lent_at: string;
+    handler_name: string;
   };
   return?: {
     id: number;
-    return_date: string;
+    actual_return_time: string;
     is_late: number;
+    late_hours: number;
+    late_fee: number;
     is_damaged: number;
     damage_level?: string;
+    damage_fee: number;
+    is_missing: number;
+    missing_fee: number;
   };
   settlement?: {
     id: number;
-    settlement_date: string;
-    total_amount: number;
+    settled_at: string;
+    total_fee: number;
     late_fee: number;
     damage_fee: number;
+    missing_fee: number;
+    deposit_received: number;
+    deposit_deducted: number;
     refund_amount: number;
+    additional_payment: number;
   };
+  created_at: string;
+  updated_at: string;
+}
+
+interface RawOrder {
+  id: number;
+  order_no: string;
+  equipment_id: number;
+  equipment_no: string;
+  type: string;
+  brand: string;
+  model: string;
+  spec: string;
+  daily_rent: number;
+  equipment_deposit: number;
+  customer_id: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+  total_rent: number;
+  deposit: number;
+  status: string;
+  remark: string | null;
+  lending?: any;
+  return?: any;
+  settlement?: any;
   created_at: string;
   updated_at: string;
 }
@@ -80,10 +118,73 @@ interface Equipment {
   type: string;
   brand: string;
   model: string;
-  specification: string;
+  spec: string;
   status: string;
-  daily_rate: number;
+  daily_rent: number;
   deposit: number;
+}
+
+function transformOrder(raw: RawOrder): Order {
+  return {
+    id: raw.id,
+    order_no: raw.order_no,
+    equipment_id: raw.equipment_id,
+    equipment: {
+      id: raw.equipment_id,
+      equipment_no: raw.equipment_no,
+      type: raw.type,
+      brand: raw.brand,
+      model: raw.model,
+      spec: raw.spec,
+      daily_rent: raw.daily_rent,
+      deposit: raw.equipment_deposit || raw.deposit,
+    },
+    customer_id: raw.customer_id,
+    customer: {
+      id: raw.customer_id,
+      name: raw.customer_name,
+      phone: raw.customer_phone,
+      email: raw.customer_email,
+    },
+    start_date: raw.start_date,
+    end_date: raw.end_date,
+    days: raw.days,
+    total_rent: raw.total_rent,
+    deposit: raw.deposit,
+    status: raw.status,
+    remark: raw.remark || undefined,
+    lending: raw.lending ? {
+      id: raw.lending.id,
+      lent_at: raw.lending.lent_at,
+      handler_name: raw.lending.handler_name,
+    } : undefined,
+    return: raw.return ? {
+      id: raw.return.id,
+      actual_return_time: raw.return.actual_return_time,
+      is_late: raw.return.is_late,
+      late_hours: raw.return.late_hours,
+      late_fee: raw.return.late_fee,
+      is_damaged: raw.return.is_damaged,
+      damage_level: raw.return.damage_level || undefined,
+      damage_fee: raw.return.damage_fee,
+      is_missing: raw.return.is_missing,
+      missing_fee: raw.return.missing_fee,
+    } : undefined,
+    settlement: raw.settlement ? {
+      id: raw.settlement.id,
+      settled_at: raw.settlement.settled_at,
+      total_fee: raw.settlement.total_fee,
+      late_fee: raw.settlement.late_fee,
+      damage_fee: raw.settlement.damage_fee,
+      missing_fee: raw.settlement.missing_fee,
+      deposit_received: raw.settlement.deposit_received,
+      deposit_deducted: raw.settlement.deposit_deducted,
+      refund_amount: raw.settlement.refund_amount,
+      additional_payment: raw.settlement.additional_payment,
+    } : undefined,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
 }
 
 interface PaginationData {
@@ -141,13 +242,13 @@ export default function Orders() {
     if (end <= start) return null;
 
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const totalRent = days * equipment.daily_rate;
+    const totalRent = days * equipment.daily_rent;
     const expectedReturn = new Date(end);
     expectedReturn.setDate(expectedReturn.getDate());
 
     return {
       days,
-      dailyRate: equipment.daily_rate,
+      dailyRate: equipment.daily_rent,
       deposit: equipment.deposit,
       totalRent,
       totalAmount: totalRent + equipment.deposit,
@@ -166,7 +267,8 @@ export default function Orders() {
 
       const response = await api.orders.list(params);
       if (response.success && response.data) {
-        let orderData = Array.isArray(response.data) ? response.data : response.data.data;
+        const rawList = Array.isArray(response.data) ? response.data : response.data.list || response.data.data || [];
+        let orderData = rawList.map((raw: RawOrder) => transformOrder(raw));
 
         if (isCustomer && user) {
           orderData = orderData.filter((o: Order) => o.customer_id === user.id);
@@ -265,7 +367,7 @@ export default function Orders() {
     try {
       const response = await api.orders.get(order.id);
       if (response.success && response.data) {
-        setSelectedOrder(response.data);
+        setSelectedOrder(transformOrder(response.data as RawOrder));
         setDetailModalOpen(true);
       } else {
         setSelectedOrder(order);
@@ -643,7 +745,7 @@ export default function Orders() {
                   </div>
                   <div>
                     <span className="text-gray-500">规格：</span>
-                    <span className="font-medium">{selectedOrder.equipment?.specification}</span>
+                    <span className="font-medium">{selectedOrder.equipment?.spec}</span>
                   </div>
                 </div>
               </div>
@@ -691,7 +793,7 @@ export default function Orders() {
                   </div>
                   <div>
                     <span className="text-gray-500">日租金：</span>
-                    <span className="font-medium">¥{selectedOrder.equipment?.daily_rate.toFixed(2)}</span>
+                    <span className="font-medium">¥{selectedOrder.equipment?.daily_rent.toFixed(2)}</span>
                   </div>
                   <div>
                     <span className="text-gray-500">总租金：</span>
@@ -713,11 +815,11 @@ export default function Orders() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-blue-600">出借日期：</span>
-                      <span className="font-medium text-blue-900">{formatDateTime(selectedOrder.lending.lending_date)}</span>
+                      <span className="font-medium text-blue-900">{formatDateTime(selectedOrder.lending.lent_at)}</span>
                     </div>
                     <div>
                       <span className="text-blue-600">经办店员：</span>
-                      <span className="font-medium text-blue-900">{selectedOrder.lending.clerk_name}</span>
+                      <span className="font-medium text-blue-900">{selectedOrder.lending.handler_name}</span>
                     </div>
                   </div>
                 </div>
@@ -739,7 +841,7 @@ export default function Orders() {
                     <div>
                       <span className={selectedOrder.return.is_damaged ? "text-red-600" : selectedOrder.return.is_late ? "text-amber-600" : "text-purple-600"}>归还日期：</span>
                       <span className={cn("font-medium", selectedOrder.return.is_damaged ? "text-red-900" : selectedOrder.return.is_late ? "text-amber-900" : "text-purple-900")}>
-                        {formatDateTime(selectedOrder.return.return_date)}
+                        {formatDateTime(selectedOrder.return.actual_return_time)}
                       </span>
                     </div>
                     {selectedOrder.return.is_late > 0 && (
@@ -769,7 +871,7 @@ export default function Orders() {
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <span className="text-green-600">结算日期：</span>
-                      <span className="font-medium text-green-900">{formatDateTime(selectedOrder.settlement.settlement_date)}</span>
+                      <span className="font-medium text-green-900">{formatDateTime(selectedOrder.settlement.settled_at)}</span>
                     </div>
                     <div>
                       <span className="text-green-600">总租金：</span>
@@ -787,14 +889,32 @@ export default function Orders() {
                         <span className="font-medium text-red-600">+¥{selectedOrder.settlement.damage_fee.toFixed(2)}</span>
                       </div>
                     )}
+                    {selectedOrder.settlement.missing_fee > 0 && (
+                      <div>
+                        <span className="text-orange-600">缺件赔偿：</span>
+                        <span className="font-medium text-orange-600">+¥{selectedOrder.settlement.missing_fee.toFixed(2)}</span>
+                      </div>
+                    )}
                     <div>
                       <span className="text-green-600">应收总额：</span>
-                      <span className="font-medium text-green-900">¥{selectedOrder.settlement.total_amount.toFixed(2)}</span>
+                      <span className="font-medium text-green-900">¥{selectedOrder.settlement.total_fee.toFixed(2)}</span>
                     </div>
                     <div>
-                      <span className="text-green-600">退还押金：</span>
-                      <span className="font-medium text-green-900">-¥{selectedOrder.settlement.refund_amount.toFixed(2)}</span>
+                      <span className="text-green-600">押金抵扣：</span>
+                      <span className="font-medium text-green-900">-¥{selectedOrder.settlement.deposit_deducted.toFixed(2)}</span>
                     </div>
+                    {selectedOrder.settlement.refund_amount > 0 && (
+                      <div>
+                        <span className="text-green-600">退还押金：</span>
+                        <span className="font-medium text-green-900">¥{selectedOrder.settlement.refund_amount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    {selectedOrder.settlement.additional_payment > 0 && (
+                      <div>
+                        <span className="text-red-600">需补付：</span>
+                        <span className="font-medium text-red-600">¥{selectedOrder.settlement.additional_payment.toFixed(2)}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -841,7 +961,7 @@ export default function Orders() {
                   <option value={0}>请选择器材</option>
                   {availableEquipments.map((eq) => (
                     <option key={eq.id} value={eq.id}>
-                      {eq.equipment_no} - {eq.brand} {eq.model} (¥{eq.daily_rate}/天)
+                      {eq.equipment_no} - {eq.brand} {eq.model} (¥{eq.daily_rent}/天)
                     </option>
                   ))}
                 </select>
@@ -855,7 +975,7 @@ export default function Orders() {
                   </div>
                   <div className="text-blue-600 text-xs">
                     {EQUIPMENT_TYPES[selectedEquipment.type as keyof typeof EQUIPMENT_TYPES] || selectedEquipment.type}
-                    {' · '}{selectedEquipment.specification}
+                    {' · '}{selectedEquipment.spec}
                   </div>
                 </div>
               )}
