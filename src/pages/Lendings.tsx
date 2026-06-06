@@ -29,8 +29,8 @@ interface Order {
     type: string;
     brand: string;
     model: string;
-    specification: string;
-    daily_rate: number;
+    spec: string;
+    daily_rent: number;
     deposit: number;
   };
   customer_id: number;
@@ -49,15 +49,85 @@ interface Order {
   remark?: string;
   lending?: {
     id: number;
-    lending_date: string;
-    clerk_name: string;
-    condition_note?: string;
-    actual_deposit: number;
-    accessories?: Array<{ name: string; quantity: number; status: string }>;
+    lent_at: string;
+    handler_name: string;
+    appearance?: string;
+    accessories?: string;
+    deposit_received: number;
     remark?: string;
   };
   created_at: string;
   updated_at: string;
+}
+
+interface RawOrder {
+  id: number;
+  order_no: string;
+  equipment_id: number;
+  equipment_no: string;
+  type: string;
+  brand: string;
+  model: string;
+  spec: string;
+  daily_rent: number;
+  equipment_deposit: number;
+  customer_id: number;
+  customer_name: string;
+  customer_phone: string;
+  customer_email: string;
+  start_date: string;
+  end_date: string;
+  days: number;
+  total_rent: number;
+  deposit: number;
+  status: string;
+  remark: string | null;
+  lending?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+function transformOrder(raw: RawOrder): Order {
+  return {
+    id: raw.id,
+    order_no: raw.order_no,
+    equipment_id: raw.equipment_id,
+    equipment: {
+      id: raw.equipment_id,
+      equipment_no: raw.equipment_no,
+      type: raw.type,
+      brand: raw.brand,
+      model: raw.model,
+      spec: raw.spec,
+      daily_rent: raw.daily_rent,
+      deposit: raw.equipment_deposit || raw.deposit,
+    },
+    customer_id: raw.customer_id,
+    customer: {
+      id: raw.customer_id,
+      name: raw.customer_name,
+      phone: raw.customer_phone,
+      email: raw.customer_email,
+    },
+    start_date: raw.start_date,
+    end_date: raw.end_date,
+    days: raw.days,
+    total_rent: raw.total_rent,
+    deposit: raw.deposit,
+    status: raw.status,
+    remark: raw.remark || undefined,
+    lending: raw.lending ? {
+      id: raw.lending.id,
+      lent_at: raw.lending.lent_at,
+      handler_name: raw.lending.handler_name,
+      appearance: raw.lending.appearance,
+      accessories: raw.lending.accessories,
+      deposit_received: raw.lending.deposit_received,
+      remark: raw.lending.remark,
+    } : undefined,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
+  };
 }
 
 interface AccessoryItem {
@@ -68,10 +138,9 @@ interface AccessoryItem {
 }
 
 interface LendingFormData {
-  condition_note: string;
-  accessories: AccessoryItem[];
-  actual_deposit: number;
-  clerk_name: string;
+  appearance: string;
+  accessories: string;
+  deposit_received: number;
   remark: string;
 }
 
@@ -90,10 +159,9 @@ export default function Lendings() {
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState<LendingFormData>({
-    condition_note: '',
-    accessories: [],
-    actual_deposit: 0,
-    clerk_name: '',
+    appearance: '',
+    accessories: '',
+    deposit_received: 0,
     remark: '',
   });
 
@@ -102,8 +170,8 @@ export default function Lendings() {
     try {
       const response = await api.orders.list({ status: 'confirmed' });
       if (response.success && response.data) {
-        const data = Array.isArray(response.data) ? response.data : response.data.data || [];
-        setPendingOrders(data);
+        const rawList = Array.isArray(response.data) ? response.data : response.data.data || response.data.list || [];
+        setPendingOrders(rawList.map((raw: RawOrder) => transformOrder(raw)));
       }
     } catch {
       showToast('获取待出借订单失败', 'error');
@@ -117,8 +185,8 @@ export default function Lendings() {
     try {
       const response = await api.orders.list({ status: 'lent' });
       if (response.success && response.data) {
-        const data = Array.isArray(response.data) ? response.data : response.data.data || [];
-        setLentOrders(data);
+        const rawList = Array.isArray(response.data) ? response.data : response.data.data || response.data.list || [];
+        setLentOrders(rawList.map((raw: RawOrder) => transformOrder(raw)));
       }
     } catch {
       showToast('获取已出借订单失败', 'error');
@@ -138,10 +206,9 @@ export default function Lendings() {
   const openLendingModal = (order: Order) => {
     setSelectedOrder(order);
     setFormData({
-      condition_note: '',
-      accessories: [{ id: Date.now(), name: '', quantity: 1, status: 'good' }],
-      actual_deposit: order.deposit,
-      clerk_name: user?.name || '',
+      appearance: '',
+      accessories: '',
+      deposit_received: order.deposit,
       remark: '',
     });
     setLendingModalOpen(true);
@@ -152,49 +219,18 @@ export default function Lendings() {
     setDetailModalOpen(true);
   };
 
-  const addAccessory = () => {
-    setFormData({
-      ...formData,
-      accessories: [
-        ...formData.accessories,
-        { id: Date.now(), name: '', quantity: 1, status: 'good' },
-      ],
-    });
-  };
-
-  const removeAccessory = (id: number) => {
-    setFormData({
-      ...formData,
-      accessories: formData.accessories.filter((a) => a.id !== id),
-    });
-  };
-
-  const updateAccessory = (id: number, field: keyof AccessoryItem, value: string | number) => {
-    setFormData({
-      ...formData,
-      accessories: formData.accessories.map((a) =>
-        a.id === id ? { ...a, [field]: value } : a
-      ),
-    });
-  };
-
   const handleSubmitLending = async () => {
     if (!selectedOrder) return;
-
-    const validAccessories = formData.accessories.filter((a) => a.name.trim());
 
     try {
       setSubmitting(true);
 
       const lendingData = {
         order_id: selectedOrder.id,
-        equipment_id: selectedOrder.equipment_id,
-        customer_id: selectedOrder.customer_id,
-        lending_date: new Date().toISOString(),
-        condition_note: formData.condition_note,
-        accessories: validAccessories.map(({ id, ...rest }) => rest),
-        actual_deposit: formData.actual_deposit,
-        clerk_name: formData.clerk_name,
+        appearance: formData.appearance,
+        accessories: formData.accessories || null,
+        deposit_received: formData.deposit_received,
+        handler_id: user?.id,
         remark: formData.remark,
       };
 
@@ -387,7 +423,7 @@ export default function Lendings() {
                   </div>
                   <div>
                     <span className="text-gray-500">规格：</span>
-                    <span className="font-medium">{selectedOrder.equipment?.specification}</span>
+                    <span className="font-medium">{selectedOrder.equipment?.spec}</span>
                   </div>
                 </div>
               </div>
@@ -425,7 +461,7 @@ export default function Lendings() {
                   </div>
                   <div>
                     <span className="text-gray-500">日租金：</span>
-                    <span className="font-medium">¥{selectedOrder.equipment?.daily_rate.toFixed(2)}</span>
+                    <span className="font-medium">¥{selectedOrder.equipment?.daily_rent.toFixed(2)}</span>
                   </div>
                   <div>
                     <span className="text-gray-500">订单押金：</span>
@@ -437,60 +473,23 @@ export default function Lendings() {
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">外观状况记录</label>
                 <textarea
-                  value={formData.condition_note}
-                  onChange={(e) => setFormData({ ...formData, condition_note: e.target.value })}
+                  value={formData.appearance}
+                  onChange={(e) => setFormData({ ...formData, appearance: e.target.value })}
                   rows={3}
                   placeholder="请记录器材出借时的外观状况..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
                 />
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-medium text-gray-700">配件清单</label>
-                  <button
-                    onClick={addAccessory}
-                    className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    <Plus className="w-4 h-4" />
-                    添加配件
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {formData.accessories.map((accessory, index) => (
-                    <div key={accessory.id} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={accessory.name}
-                        onChange={(e) => updateAccessory(accessory.id, 'name', e.target.value)}
-                        placeholder="配件名称"
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                      />
-                      <input
-                        type="number"
-                        value={accessory.quantity}
-                        onChange={(e) => updateAccessory(accessory.id, 'quantity', parseInt(e.target.value) || 1)}
-                        min="1"
-                        className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                      />
-                      <select
-                        value={accessory.status}
-                        onChange={(e) => updateAccessory(accessory.id, 'status', e.target.value)}
-                        className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-                      >
-                        <option value="good">良好</option>
-                        <option value="normal">一般</option>
-                        <option value="worn">磨损</option>
-                      </select>
-                      <button
-                        onClick={() => removeAccessory(accessory.id)}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">配件清单（JSON格式）</label>
+                <textarea
+                  value={formData.accessories}
+                  onChange={(e) => setFormData({ ...formData, accessories: e.target.value })}
+                  rows={2}
+                  placeholder='如：["电池 x1", "充电器 x1", "肩带 x1"]'
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none font-mono text-sm"
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -501,22 +500,10 @@ export default function Lendings() {
                   </label>
                   <input
                     type="number"
-                    value={formData.actual_deposit}
-                    onChange={(e) => setFormData({ ...formData, actual_deposit: parseFloat(e.target.value) || 0 })}
+                    value={formData.deposit_received}
+                    onChange={(e) => setFormData({ ...formData, deposit_received: parseFloat(e.target.value) || 0 })}
                     min="0"
                     step="0.01"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700 flex items-center gap-1">
-                    <User className="w-4 h-4" />
-                    经办人
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.clerk_name}
-                    onChange={(e) => setFormData({ ...formData, clerk_name: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
                 </div>
@@ -595,47 +582,30 @@ export default function Lendings() {
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
                     <span className="text-blue-600">出借时间：</span>
-                    <span className="font-medium text-blue-900">{formatDateTime(selectedOrder.lending.lending_date)}</span>
+                    <span className="font-medium text-blue-900">{formatDateTime(selectedOrder.lending.lent_at)}</span>
                   </div>
                   <div>
                     <span className="text-blue-600">经办店员：</span>
-                    <span className="font-medium text-blue-900">{selectedOrder.lending.clerk_name}</span>
+                    <span className="font-medium text-blue-900">{selectedOrder.lending.handler_name}</span>
                   </div>
                   <div>
                     <span className="text-blue-600">实收押金：</span>
-                    <span className="font-medium text-blue-900">¥{selectedOrder.lending.actual_deposit.toFixed(2)}</span>
+                    <span className="font-medium text-blue-900">¥{selectedOrder.lending.deposit_received.toFixed(2)}</span>
                   </div>
                 </div>
               </div>
 
-              {selectedOrder.lending.condition_note && (
+              {selectedOrder.lending.appearance && (
                 <div className="bg-gray-50 rounded-xl p-4">
                   <h3 className="font-medium text-gray-900 mb-2">外观状况记录</h3>
-                  <p className="text-gray-600 text-sm">{selectedOrder.lending.condition_note}</p>
+                  <p className="text-gray-600 text-sm">{selectedOrder.lending.appearance}</p>
                 </div>
               )}
 
-              {selectedOrder.lending.accessories && selectedOrder.lending.accessories.length > 0 && (
+              {selectedOrder.lending.accessories && (
                 <div className="bg-gray-50 rounded-xl p-4 space-y-3">
                   <h3 className="font-medium text-gray-900">配件清单</h3>
-                  <div className="space-y-2">
-                    {selectedOrder.lending.accessories.map((acc, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm bg-white p-2 rounded">
-                        <span>{acc.name}</span>
-                        <div className="flex items-center gap-4">
-                          <span className="text-gray-500">数量: {acc.quantity}</span>
-                          <span className={cn(
-                            "px-2 py-0.5 rounded text-xs",
-                            acc.status === 'good' ? "bg-green-100 text-green-700" :
-                            acc.status === 'normal' ? "bg-yellow-100 text-yellow-700" :
-                            "bg-orange-100 text-orange-700"
-                          )}>
-                            {acc.status === 'good' ? '良好' : acc.status === 'normal' ? '一般' : '磨损'}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <p className="text-gray-600 text-sm font-mono">{selectedOrder.lending.accessories}</p>
                 </div>
               )}
 

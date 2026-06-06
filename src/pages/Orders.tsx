@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Eye,
@@ -196,8 +196,11 @@ interface PaginationData {
 
 export default function Orders() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const { showToast } = useUIStore();
+
+  const preselectedHandled = useRef(false);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
@@ -349,9 +352,10 @@ export default function Orders() {
   }, [createModalOpen, fetchAvailableEquipments]);
 
   useEffect(() => {
-    if (preselectedEquipmentId && !createModalOpen) {
+    if (preselectedEquipmentId && !createModalOpen && !preselectedHandled.current) {
       setFormData((prev) => ({ ...prev, equipment_id: preselectedEquipmentId }));
       setCreateModalOpen(true);
+      preselectedHandled.current = true;
     }
   }, [preselectedEquipmentId, createModalOpen]);
 
@@ -387,7 +391,14 @@ export default function Orders() {
       remark: '',
     });
     setAvailabilityError('');
+    preselectedHandled.current = false;
     setCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    setCreateModalOpen(false);
+    navigate('.', { replace: true, state: {} });
+    preselectedHandled.current = false;
   };
 
   const handleConfirmOrder = async (orderId: number) => {
@@ -450,7 +461,7 @@ export default function Orders() {
       const response = await api.orders.create(submitData);
       if (response.success) {
         showToast('预约创建成功', 'success');
-        setCreateModalOpen(false);
+        closeCreateModal();
         fetchOrders();
       } else {
         showToast(response.error || '创建失败', 'error');
@@ -944,7 +955,7 @@ export default function Orders() {
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">创建预约</h2>
               <button
-                onClick={() => setCreateModalOpen(false)}
+                onClick={() => closeCreateModal()}
                 className="p-1 hover:bg-gray-100 rounded-full transition-colors"
               >
                 <X className="w-5 h-5" />
@@ -1077,7 +1088,7 @@ export default function Orders() {
                 确认预约
               </button>
               <button
-                onClick={() => setCreateModalOpen(false)}
+                onClick={() => closeCreateModal()}
                 className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
               >
                 取消

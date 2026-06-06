@@ -30,14 +30,54 @@ interface Repair {
     model: string;
     status: string;
   };
-  problem_description: string;
+  description: string;
   status: string;
   repair_cost: number;
-  send_date: string;
-  completion_date?: string;
+  sent_date: string;
+  completed_date?: string;
   remark?: string;
   created_at: string;
   updated_at: string;
+}
+
+interface RawRepair {
+  id: number;
+  equipment_id: number;
+  equipment_no: string;
+  equipment_type: string;
+  equipment_brand: string;
+  equipment_model: string;
+  equipment_status: string;
+  description: string;
+  status: string;
+  repair_cost: number;
+  sent_date: string;
+  completed_date: string | null;
+  remark: string | null;
+  created_at: string;
+}
+
+function transformRepair(raw: RawRepair): Repair {
+  return {
+    id: raw.id,
+    equipment_id: raw.equipment_id,
+    equipment: {
+      id: raw.equipment_id,
+      equipment_no: raw.equipment_no,
+      type: raw.equipment_type,
+      brand: raw.equipment_brand,
+      model: raw.equipment_model,
+      status: raw.equipment_status,
+    },
+    description: raw.description,
+    status: raw.status,
+    repair_cost: raw.repair_cost || 0,
+    sent_date: raw.sent_date,
+    completed_date: raw.completed_date || undefined,
+    remark: raw.remark || undefined,
+    created_at: raw.created_at,
+    updated_at: raw.created_at,
+  };
 }
 
 interface Equipment {
@@ -78,11 +118,11 @@ export default function Repairs() {
 
   const [formData, setFormData] = useState({
     equipment_id: 0,
-    problem_description: '',
+    description: '',
     status: 'pending',
     repair_cost: 0,
-    send_date: new Date().toISOString().split('T')[0],
-    completion_date: '',
+    sent_date: new Date().toISOString().split('T')[0],
+    completed_date: '',
     remark: '',
   });
 
@@ -98,7 +138,8 @@ export default function Repairs() {
 
       const response = await api.repairs.list(params);
       if (response.success && response.data) {
-        const repairData = Array.isArray(response.data) ? response.data : response.data.data || [];
+        const rawData = Array.isArray(response.data) ? response.data : response.data.list || response.data.data || [];
+        const repairData = rawData.map((raw: RawRepair) => transformRepair(raw));
         setRepairs(repairData);
         setPagination((prev) => ({
           ...prev,
@@ -139,11 +180,11 @@ export default function Repairs() {
     setFormMode('create');
     setFormData({
       equipment_id: 0,
-      problem_description: '',
+      description: '',
       status: 'pending',
       repair_cost: 0,
-      send_date: new Date().toISOString().split('T')[0],
-      completion_date: '',
+      sent_date: new Date().toISOString().split('T')[0],
+      completed_date: '',
       remark: '',
     });
     setFormModalOpen(true);
@@ -154,11 +195,11 @@ export default function Repairs() {
     setSelectedRepair(repair);
     setFormData({
       equipment_id: repair.equipment_id,
-      problem_description: repair.problem_description,
+      description: repair.description,
       status: repair.status,
       repair_cost: repair.repair_cost,
-      send_date: repair.send_date.split('T')[0],
-      completion_date: repair.completion_date ? repair.completion_date.split('T')[0] : '',
+      sent_date: repair.sent_date.split('T')[0],
+      completed_date: repair.completed_date ? repair.completed_date.split('T')[0] : '',
       remark: repair.remark || '',
     });
     setFormModalOpen(true);
@@ -174,11 +215,11 @@ export default function Repairs() {
       showToast('请选择器材', 'error');
       return;
     }
-    if (!formData.problem_description.trim()) {
+    if (!formData.description.trim()) {
       showToast('请填写问题描述', 'error');
       return;
     }
-    if (formData.status === 'completed' && !formData.completion_date) {
+    if ((formData.status === 'completed' || formData.status === 'scrapped') && !formData.completed_date) {
       showToast('请填写完成日期', 'error');
       return;
     }
@@ -187,10 +228,15 @@ export default function Repairs() {
     try {
       let response;
       const submitData = {
-        ...formData,
-        completion_date: formData.status === 'completed' || formData.status === 'scrapped' 
-          ? formData.completion_date || new Date().toISOString().split('T')[0] 
+        equipment_id: formData.equipment_id,
+        description: formData.description,
+        status: formData.status,
+        repair_cost: formData.repair_cost,
+        sent_date: formData.sent_date,
+        completed_date: (formData.status === 'completed' || formData.status === 'scrapped')
+          ? formData.completed_date || new Date().toISOString().split('T')[0]
           : null,
+        remark: formData.remark,
       };
 
       if (formMode === 'create') {
@@ -322,16 +368,16 @@ export default function Repairs() {
                       <div className="text-xs text-gray-500">{repair.equipment?.equipment_no}</div>
                     </td>
                     <td className="px-4 py-3 max-w-[250px]">
-                      <div className="text-gray-600 truncate" title={repair.problem_description}>
-                        {repair.problem_description}
+                      <div className="text-gray-600 truncate" title={repair.description}>
+                        {repair.description}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge type="repair" status={repair.status} />
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{formatDate(repair.send_date)}</td>
+                    <td className="px-4 py-3 text-gray-600">{formatDate(repair.sent_date)}</td>
                     <td className="px-4 py-3 text-gray-600">
-                      {repair.completion_date ? formatDate(repair.completion_date) : '-'}
+                      {repair.completed_date ? formatDate(repair.completed_date) : '-'}
                     </td>
                     <td className="px-4 py-3">
                       {repair.repair_cost > 0 ? (
@@ -470,8 +516,8 @@ export default function Repairs() {
               <div className="space-y-1">
                 <label className="block text-sm font-medium text-gray-700">问题描述 *</label>
                 <textarea
-                  value={formData.problem_description}
-                  onChange={(e) => setFormData({ ...formData, problem_description: e.target.value })}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                   placeholder="请描述器材的故障或问题"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
@@ -483,8 +529,8 @@ export default function Repairs() {
                   <label className="block text-sm font-medium text-gray-700">送修日期 *</label>
                   <input
                     type="date"
-                    value={formData.send_date}
-                    onChange={(e) => setFormData({ ...formData, send_date: e.target.value })}
+                    value={formData.sent_date}
+                    onChange={(e) => setFormData({ ...formData, sent_date: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
                 </div>
@@ -507,8 +553,8 @@ export default function Repairs() {
                   <label className="block text-sm font-medium text-gray-700">完成日期 *</label>
                   <input
                     type="date"
-                    value={formData.completion_date}
-                    onChange={(e) => setFormData({ ...formData, completion_date: e.target.value })}
+                    value={formData.completed_date}
+                    onChange={(e) => setFormData({ ...formData, completed_date: e.target.value })}
                     max={new Date().toISOString().split('T')[0]}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                   />
